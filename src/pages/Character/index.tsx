@@ -2,14 +2,31 @@ import { Link, useParams } from 'react-router-dom';
 import { ArrowLeft, Heart, MessageCircle, Sparkles, UserRound, BookOpen, Drama } from 'lucide-react';
 import { Page } from '@/components/common/Page';
 import { CharacterAvatar } from '@/components/common/CharacterAvatar';
-import { demoCharacters } from '@/features/characters/demoCharacters';
+import { useCharacters } from '@/hooks/useCharacters';
 import { useFavorites } from '@/hooks/useFavorites';
 import { cn } from '@/utils/cn';
 
 export default function CharacterPage() {
   const { id } = useParams<{ id: string }>();
+  const { characters, loading, error } = useCharacters();
   const { isFavorite, toggleFavorite } = useFavorites();
-  const character = demoCharacters.find((c) => c.id === id);
+  const character = characters.find((c) => c.id === id) ?? null;
+
+  if (loading) {
+    return (
+      <div className="h-52 w-full animate-pulse bg-neutral-900 sm:h-64" />
+    );
+  }
+
+  if (error) {
+    return (
+      <Page>
+        <p className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-center text-sm text-red-300" role="alert">
+          {error}
+        </p>
+      </Page>
+    );
+  }
 
   if (!character) {
     return (
@@ -83,7 +100,7 @@ export default function CharacterPage() {
 
           <p className="text-base leading-relaxed text-neutral-300">{character.description}</p>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {character.tags.map((tag) => (
               <span
                 key={tag}
@@ -92,6 +109,9 @@ export default function CharacterPage() {
                 #{tag}
               </span>
             ))}
+            <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs text-amber-400">
+              Popularidad: {character.stats.popularityScore} (demo)
+            </span>
           </div>
 
           <Link
@@ -117,6 +137,9 @@ export default function CharacterPage() {
             Historia
           </h2>
           <p className="mt-3 leading-relaxed text-neutral-300">{character.backstory}</p>
+          {character.occupation && (
+            <p className="mt-2 text-sm text-neutral-500">Ocupación: {character.occupation}</p>
+          )}
         </section>
 
         <section className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-950/40 to-neutral-900 p-5 sm:p-6">

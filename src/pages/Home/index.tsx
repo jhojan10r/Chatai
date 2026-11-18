@@ -3,8 +3,8 @@ import { ArrowRight, Compass, Flame, MessageCircle, Search, Sparkles, TrendingUp
 import { Page } from '@/components/common/Page';
 import { CharacterCard } from '@/components/common/CharacterCard';
 import { CharacterAvatar } from '@/components/common/CharacterAvatar';
-import { demoCharacters } from '@/features/characters/demoCharacters';
 import { CATEGORIES } from '@/features/characters/categories';
+import { useCharacters } from '@/hooks/useCharacters';
 import { useFavorites } from '@/hooks/useFavorites';
 
 const categoryLinks = [
@@ -17,10 +17,11 @@ const categoryLinks = [
 ];
 
 export default function HomePage() {
+  const { characters, loading, error } = useCharacters();
   const { isFavorite, toggleFavorite } = useFavorites();
-  const featured = demoCharacters.slice(0, 4);
-  const trending = [...demoCharacters]
-    .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+  const featured = characters.slice(0, 4);
+  const trending = [...characters]
+    .sort((a, b) => b.stats.popularityScore - a.stats.popularityScore)
     .slice(0, 6);
 
   return (
@@ -60,6 +61,19 @@ export default function HomePage() {
         </div>
       </section>
 
+      {error && (
+        <p className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-center text-sm text-red-300" role="alert">
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="h-72 animate-pulse rounded-2xl bg-neutral-900" />
+          ))}
+        </div>
+      ) : (
       <section aria-labelledby="featured-heading">
         <div className="mb-4 flex items-center justify-between">
           <h2 id="featured-heading" className="flex items-center gap-2 text-xl font-bold text-white">
@@ -82,6 +96,7 @@ export default function HomePage() {
           ))}
         </div>
       </section>
+      )}
 
       <section aria-labelledby="trending-heading">
         <div className="mb-4 flex items-center justify-between">
@@ -112,7 +127,7 @@ export default function HomePage() {
               <p className="truncate text-sm font-semibold text-white">{character.name}</p>
               <span className="flex items-center gap-1 text-[11px] text-amber-400">
                 <Flame className="h-3 w-3" />
-                {character.popularity} puntos
+                {character.stats.popularityScore} puntos
               </span>
             </Link>
           ))}
@@ -125,7 +140,7 @@ export default function HomePage() {
         </h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {categoryLinks.map(({ category }) => {
-            const count = demoCharacters.filter((c) => c.category === category).length;
+            const count = characters.filter((c) => c.category === category).length;
             return (
               <Link
                 key={category}

@@ -3,20 +3,21 @@ import { useSearchParams } from 'react-router-dom';
 import { Search, SearchX, SlidersHorizontal } from 'lucide-react';
 import { Page } from '@/components/common/Page';
 import { CharacterCard } from '@/components/common/CharacterCard';
-import { demoCharacters } from '@/features/characters/demoCharacters';
 import { CATEGORIES } from '@/features/characters/categories';
+import { useCharacters } from '@/hooks/useCharacters';
 import { useFavorites } from '@/hooks/useFavorites';
 import { cn } from '@/utils/cn';
 
 export default function ExplorePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [query, setQuery] = useState('');
+  const { characters, loading, error } = useCharacters();
   const { isFavorite, toggleFavorite } = useFavorites();
   const activeCategory = searchParams.get('category');
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return demoCharacters.filter((c) => {
+    return characters.filter((c) => {
       const matchesQuery =
         !q ||
         c.name.toLowerCase().includes(q) ||
@@ -24,7 +25,7 @@ export default function ExplorePage() {
       const matchesCategory = !activeCategory || c.category === activeCategory;
       return matchesQuery && matchesCategory;
     });
-  }, [query, activeCategory]);
+  }, [characters, query, activeCategory]);
 
   const selectCategory = (category: string | null) => {
     setSearchParams(category ? { category } : {}, { replace: true });
@@ -81,11 +82,25 @@ export default function ExplorePage() {
         </div>
       </header>
 
-      <p className="text-sm text-neutral-500" role="status">
-        {results.length} {results.length === 1 ? 'personaje encontrado' : 'personajes encontrados'}
-      </p>
+      {error && (
+        <p className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-center text-sm text-red-300" role="alert">
+          {error}
+        </p>
+      )}
 
-      {results.length > 0 ? (
+      {!loading && !error && (
+        <p className="text-sm text-neutral-500" role="status">
+          {results.length} {results.length === 1 ? 'personaje encontrado' : 'personajes encontrados'}
+        </p>
+      )}
+
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="h-72 animate-pulse rounded-2xl bg-neutral-900" />
+          ))}
+        </div>
+      ) : results.length > 0 ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {results.map((character) => (
             <CharacterCard
@@ -96,7 +111,7 @@ export default function ExplorePage() {
             />
           ))}
         </div>
-      ) : (
+      ) : !error ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-neutral-800 bg-neutral-900/50 p-12 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neutral-800 text-neutral-500">
             <SearchX className="h-6 w-6" />
@@ -117,7 +132,7 @@ export default function ExplorePage() {
             Limpiar filtros
           </button>
         </div>
-      )}
+      ) : null}
     </Page>
   );
 }
