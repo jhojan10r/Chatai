@@ -11,22 +11,63 @@ const SCHEMA_VERSION = 2;
 
 export class CharacterStorageError extends Error {}
 
-function readLocalCharacters(): Character[] {
+/** Formato versionado del almacenamiento local. */
+interface CharacterStorageEnvelope {
+  storageSchemaVersion: number;
+  characters: Character[];
+}
+
+interface LocalCharactersState {
+  characters: Character[];
+  /** false si los datos pertenecen a una versión que no sabemos migrar. */
+  compatible: boolean;
+}
+
+function readLocalCharacters(): LocalCharactersState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
+    if (!raw) return { characters: [], compatible: true };
+
     const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidCharacterShape);
+
+    // Formato legado: lista plana de personajes. Se migra al guardar de nuevo.
+    if (Array.isArray(parsed)) {
+      return { characters: parsed.filter(isValidCharacterShape), compatible: true };
+    }
+
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'storageSchemaVersion' in parsed &&
+      'characters' in parsed
+    ) {
+      const envelope = parsed as Record<string, unknown>;
+      if (envelope.storageSchemaVersion !== SCHEMA_VERSION || !Array.isArray(envelope.characters)) {
+        return { characters: [], compatible: false };
+      }
+      return { characters: envelope.characters.filter(isValidCharacterShape), compatible: true };
+    }
+
+    // Datos corruptos: se ignora y se parte de los demo.
+    return { characters: [], compatible: true };
   } catch {
-    // Datos corruptos o almacenamiento no disponible: se ignora y se parte de los demo.
-    return [];
+    // Almacenamiento no disponible o JSON inválido: se ignora y se parte de los demo.
+    return { characters: [], compatible: true };
   }
 }
 
-function writeLocalCharacters(characters: Character[]): void {
+function writeLocalCharacters(state: LocalCharactersState): void {
+  if (!state.compatible) {
+    throw new CharacterStorageError(
+      'Los datos guardados pertenecen a una versión más reciente de la aplicación y no se pueden modificar sin perder información. No se han cambiado tus personajes.'
+    );
+  }
+  const envelope: CharacterStorageEnvelope = {
+    storageSchemaVersion: SCHEMA_VERSION,
+    characters: state.characters,
+  };
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(characters));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(envelope));
   } catch {
     throw new CharacterStorageError('No se pudo guardar en el almacenamiento local.');
   }
@@ -54,12 +95,28 @@ function generateId(name: string, existing: Character[]): string {
   return id;
 }
 
+function generateSlug(name: string, existing: Character[]): string {
+  const base = slugify(name) || 'personaje';
+  let slug = base;
+  let counter = 2;
+  const slugs = new Set(existing.map((c) => c.slug));
+  while (slugs.has(slug)) {
+    slug = `${base}-${counter}`;
+    counter++;
+  }
+  return slug;
+}
+
 export class LocalCharacterRepository implements CharacterRepository {
-  /** Demo + locales, evitando duplicados de id. Los demo siempre ganan su id. */
+  /** Demo + locales, evitando duplicados de id y de slug. Los demo siempre ganan. */
   private all(): Character[] {
-    const local = readLocalCharacters();
+    const { characters: local } = readLocalCharacters();
     const demoIds = new Set(demoCharacters.map((c) => c.id));
-    return [...demoCharacters, ...local.filter((c) => !demoIds.has(c.id))];
+    const demoSlugs = new Set(demoCharacters.map((c) => c.slug));
+    return [
+      ...demoCharacters,
+      ...local.filter((c) => !demoIds.has(c.id) && !demoSlugs.has(c.slug)),
+    ];
   }
 
   async getAll(): Promise<Character[]> {
@@ -89,18 +146,31 @@ export class LocalCharacterRepository implements CharacterRepository {
     return this.all().filter((c) => c.creatorId === creatorId);
   }
 
+  async getPublic(): Promise<Character[]> {
+    return this.all().filter((c) => c.isPublic && c.visibility === 'public' && c.status === 'published');
+  }
+
+  async getFeatured(): Promise<Character[]> {
+    return this.all().filter((c) => c.isFeatured);
+  }
+
+  async getOfficial(): Promise<Character[]> {
+    return this.all().filter((c) => c.isOfficial);
+  }
+
   async create(draft: CharacterDraft): Promise<Character> {
     const error = validateCharacterDraft(draft);
     if (error) {
       throw new CharacterStorageError(`Datos del personaje no válidos: ${error}`);
     }
 
-    const local = readLocalCharacters();
+    const state = readLocalCharacters();
+    const all = this.all();
     const now = new Date().toISOString();
     const character: Character = {
       name: draft.name.trim(),
-      id: generateId(draft.name, this.all()),
-      slug: slugify(draft.name),
+      id: generateId(draft.name, all),
+      slug: generateSlug(draft.name, all),
       creatorId: draft.creatorId,
       createdAt: now,
       updatedAt: now,
@@ -138,23 +208,26 @@ export class LocalCharacterRepository implements CharacterRepository {
       stats: { conversationCount: 0, favoriteCount: 0, popularityScore: 0 },
     };
 
-    writeLocalCharacters([...local, character]);
+    writeLocalCharacters({ ...state, characters: [...state.characters, character] });
     return character;
   }
 
   async update(id: string, changes: CharacterUpdate): Promise<Character> {
-    if ('id' in changes && changes.id !== id) {
-      throw new CharacterStorageError('El identificador de un personaje no se puede modificar.');
+    const protectedFields = ['id', 'slug', 'creatorId', 'createdAt', 'schemaVersion', 'isOfficial', 'stats'] as const;
+    for (const field of protectedFields) {
+      if (field in changes) {
+        throw new CharacterStorageError(`El campo "${field}" de un personaje no se puede modificar.`);
+      }
     }
 
-    const local = readLocalCharacters();
-    const index = local.findIndex((c) => c.id === id);
+    const state = readLocalCharacters();
+    const index = state.characters.findIndex((c) => c.id === id);
     if (index === -1) {
-      // Los personajes oficiales de demostración no se modifican desde el cliente.
+      // Los personajes de demostración viven en el código y no se modifican desde el cliente.
       throw new CharacterStorageError('Personaje no encontrado o no modificable.');
     }
 
-    const current = local[index];
+    const current = state.characters[index];
     const updated: Character = {
       ...current,
       ...changes,
@@ -176,16 +249,23 @@ export class LocalCharacterRepository implements CharacterRepository {
       throw new CharacterStorageError(`Datos del personaje no válidos: ${error}`);
     }
 
-    local[index] = updated;
-    writeLocalCharacters(local);
+    state.characters[index] = updated;
+    writeLocalCharacters(state);
     return updated;
   }
 
   async remove(id: string): Promise<boolean> {
-    const local = readLocalCharacters();
-    const filtered = local.filter((c) => c.id !== id);
-    if (filtered.length === local.length) return false;
-    writeLocalCharacters(filtered);
+    const target = this.all().find((c) => c.id === id);
+    if (!target) return false;
+    if (target.isOfficial) {
+      throw new CharacterStorageError('Los personajes oficiales no se pueden eliminar.');
+    }
+
+    const state = readLocalCharacters();
+    writeLocalCharacters({
+      ...state,
+      characters: state.characters.filter((c) => c.id !== id),
+    });
     return true;
   }
 }
