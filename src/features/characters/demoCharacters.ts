@@ -1,20 +1,23 @@
-import type { Character } from '@/types';
+import type { Character, CharacterStats } from '@/types';
 
 const SCHEMA_VERSION = 2;
 
-function officialCharacter(base: Omit<Character, 'schemaVersion' | 'visibility' | 'status' | 'isPublic' | 'isFeatured' | 'isOfficial' | 'allowUserInteractions' | 'contentRating' | 'metadata' | 'stats'>): Character {
+type DemoCharacterBase = Omit<Character, 'schemaVersion' | 'visibility' | 'status' | 'isPublic' | 'isFeatured' | 'isOfficial' | 'allowUserInteractions' | 'contentRating' | 'metadata'> & { stats?: CharacterStats };
+
+function officialCharacter(base: DemoCharacterBase): Character {
+  const stats: CharacterStats = base.stats ?? { conversationCount: 0, favoriteCount: 0, popularityScore: 0 };
   return {
     ...base,
     schemaVersion: SCHEMA_VERSION,
     visibility: 'public',
     status: 'published',
     isPublic: true,
-    isFeatured: base.stats.popularityScore >= 85,
+    isFeatured: stats.popularityScore >= 85,
     isOfficial: true,
     allowUserInteractions: true,
     contentRating: 'teen',
     metadata: { source: 'demo' },
-    stats: base.stats,
+    stats,
   };
 }
 

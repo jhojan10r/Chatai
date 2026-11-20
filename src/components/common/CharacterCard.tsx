@@ -48,10 +48,10 @@ export function CharacterCard({ character, isFavorite, onToggleFavorite }: Chara
       <div className="flex flex-1 flex-col gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-semibold leading-tight text-white">{character.name}</h3>
-          {character.popularity !== undefined && (
+          {character.stats.popularityScore > 0 && (
             <span className="flex shrink-0 items-center gap-1 rounded-full bg-neutral-800 px-2 py-0.5 text-[11px] font-medium text-amber-400">
               <Flame className="h-3 w-3" />
-              {character.popularity}
+              {character.stats.popularityScore}
             </span>
           )}
         </div>

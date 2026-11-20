@@ -6,7 +6,9 @@ export type CharacterValidationError =
   | 'description-required'
   | 'description-too-long'
   | 'personality-required'
+  | 'personality-too-long'
   | 'backstory-required'
+  | 'backstory-too-long'
   | 'greeting-required'
   | 'greeting-too-long'
   | 'category-invalid'
@@ -59,10 +61,10 @@ export function validateCharacterDraft(draft: CharacterDraft): CharacterValidati
   if (description.length > CHARACTER_LIMITS.description) return 'description-too-long';
 
   if (!draft.personality.trim()) return 'personality-required';
-  if (draft.personality.length > CHARACTER_LIMITS.personality) return 'personality-required';
+  if (draft.personality.length > CHARACTER_LIMITS.personality) return 'personality-too-long';
 
   if (!draft.backstory.trim()) return 'backstory-required';
-  if (draft.backstory.length > CHARACTER_LIMITS.backstory) return 'backstory-required';
+  if (draft.backstory.length > CHARACTER_LIMITS.backstory) return 'backstory-too-long';
 
   const greeting = draft.greeting.trim();
   if (!greeting) return 'greeting-required';
@@ -78,6 +80,43 @@ export function validateCharacterDraft(draft: CharacterDraft): CharacterValidati
   if (draft.imageUrl && !isValidHttpUrl(draft.imageUrl)) return 'image-url-invalid';
 
   return null;
+}
+
+/** Errores por campo, listos para formularios: clave de campo -> código de error. */
+export type CharacterDraftFieldErrors = Partial<Record<keyof CharacterDraft, CharacterValidationError>>;
+
+/** Valida campo a campo un borrador; devuelve un mapa vacío si todo es válido. */
+export function validateCharacterDraftFields(draft: CharacterDraft): CharacterDraftFieldErrors {
+  const errors: CharacterDraftFieldErrors = {};
+
+  const name = draft.name.trim();
+  if (!name) errors.name = 'name-required';
+  else if (name.length > CHARACTER_LIMITS.name) errors.name = 'name-too-long';
+
+  const description = draft.description.trim();
+  if (!description) errors.description = 'description-required';
+  else if (description.length > CHARACTER_LIMITS.description) errors.description = 'description-too-long';
+
+  if (!draft.personality.trim()) errors.personality = 'personality-required';
+  else if (draft.personality.length > CHARACTER_LIMITS.personality) errors.personality = 'personality-too-long';
+
+  if (!draft.backstory.trim()) errors.backstory = 'backstory-required';
+  else if (draft.backstory.length > CHARACTER_LIMITS.backstory) errors.backstory = 'backstory-too-long';
+
+  const greeting = draft.greeting.trim();
+  if (!greeting) errors.greeting = 'greeting-required';
+  else if (greeting.length > CHARACTER_LIMITS.greeting) errors.greeting = 'greeting-too-long';
+
+  if (!isCharacterCategory(draft.category)) errors.category = 'category-invalid';
+
+  const tags = draft.tags ?? [];
+  if (tags.length > CHARACTER_LIMITS.maxTags) errors.tags = 'too-many-tags';
+  else if (hasDuplicates(tags)) errors.tags = 'tags-duplicated';
+  else if (tags.some((tag) => tag.trim().length > CHARACTER_LIMITS.tagLength)) errors.tags = 'tag-too-long';
+
+  if (draft.imageUrl && !isValidHttpUrl(draft.imageUrl)) errors.imageUrl = 'image-url-invalid';
+
+  return errors;
 }
 
 const CATEGORIES = ['Fantasía', 'Aventura', 'Misterio', 'Ciencia ficción', 'Comedia', 'Vida cotidiana'] as const;

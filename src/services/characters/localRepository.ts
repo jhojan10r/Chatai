@@ -98,6 +98,7 @@ export class LocalCharacterRepository implements CharacterRepository {
     const local = readLocalCharacters();
     const now = new Date().toISOString();
     const character: Character = {
+      name: draft.name.trim(),
       id: generateId(draft.name, this.all()),
       slug: slugify(draft.name),
       creatorId: draft.creatorId,
@@ -161,6 +162,7 @@ export class LocalCharacterRepository implements CharacterRepository {
     };
 
     const error = validateCharacterDraft({
+      creatorId: updated.creatorId,
       name: updated.name,
       description: updated.description,
       category: updated.category,
